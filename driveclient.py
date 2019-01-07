@@ -38,8 +38,9 @@ def uploadFile(localPath, remotePath):
     media = MediaFileUpload(localPath, mimetype=mime)
     if service is None:
         connect()
-    service.files().create(body=file_metadata,
-                           media_body=media, fields='id').execute()
+    file = service.files().create(body=file_metadata,
+                                  media_body=media, fields='id').execute()
+    print("Local file: %s, ID: %s" % (localPath, file.get('id')))
 
 
 # TODO: make this work with folders
@@ -81,6 +82,17 @@ def findFileByName(fileName):
     print("File not found")
 
 
+def createDriveFolder(name, parentId):
+    file_metadata = {
+        'name': name,
+        'parents': [parentId],
+        'mimeType': 'application/vnd.google-apps.folder'
+    }
+    file = service.files().create(body=file_metadata,
+                                  fields='id').execute()
+    print('Folder name: %s, ID: %s' % (name, file.get('id')))
+
+
 # TODO: implement
 def sync():
     """ Syncronize all files in config file with google drive.
@@ -94,3 +106,4 @@ def sync():
 if __name__ == '__main__':
     uploadFile("arcticStars.jpg", "myBackground.jpg")
     downloadFile("myBackground.jpg", "myBackground.jpg")
+    createDriveFolder("test", "root")
