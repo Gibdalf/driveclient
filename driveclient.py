@@ -82,7 +82,8 @@ def findFileByName(fileName):
     print("File not found")
 
 
-def createDriveFolder(name, parentId):
+def createDriveFolder(name, parentName):
+    parentId = "root" if parentName is None else findFileByName(parentName)
     file_metadata = {
         'name': name,
         'parents': [parentId],
@@ -106,4 +107,6 @@ def sync():
 if __name__ == '__main__':
     uploadFile("arcticStars.jpg", "myBackground.jpg")
     downloadFile("myBackground.jpg", "myBackground.jpg")
-    createDriveFolder("test", "root")
+    createDriveFolder("test", None)
+    createDriveFolder("inner", "test")
+    createDriveFolder("innerer", "inner")
