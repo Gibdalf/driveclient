@@ -5,6 +5,7 @@ from httplib2 import Http
 from oauth2client import file, client, tools
 from magic import Magic
 import io
+import os
 
 # If modifying these scopes, delete the file token.json.
 SCOPES = 'https://www.googleapis.com/auth/drive'
@@ -26,18 +27,20 @@ def connect():
 
 # TODO: make this work with folders
 # (currently only works with files in drive's root directory)
-def uploadFile(localPath, remotePath):
+# TODO: test
+def uploadFile(localPath, remoteName, parentId):
     """ Upload a single file to google drive.
 
     Arguments:
         localPath {string} -- path to the file to upload
-        remotePath {string} -- path to the new file on drive
+        remoteName {string} -- path to the new file on drive
+        parentName {string} -- name of parent folder on drive
     """
-    file_metadata = {'name': remotePath}
     mime = Magic(mime=True).from_file(localPath)
+    file_metadata = {'name': remoteName,
+                     'parents': [parentId],
+                     'mimeType': mime}
     media = MediaFileUpload(localPath, mimetype=mime)
-    if service is None:
-        connect()
     file = service.files().create(body=file_metadata,
                                   media_body=media, fields='id').execute()
     print("Local file: %s, ID: %s" % (localPath, file.get('id')))
@@ -82,8 +85,8 @@ def findFileByName(fileName):
     print("File not found")
 
 
-def createDriveFolder(name, parentName):
-    parentId = "root" if parentName is None else findFileByName(parentName)
+# TODO: somehow differentiate between folders with same name
+def createDriveFolder(name, parentId):
     file_metadata = {
         'name': name,
         'parents': [parentId],
@@ -92,6 +95,24 @@ def createDriveFolder(name, parentName):
     file = service.files().create(body=file_metadata,
                                   fields='id').execute()
     print('Folder name: %s, ID: %s' % (name, file.get('id')))
+    return file.get('id')
+
+
+def uploadFolder(localPath, parentId):
+    name = os.path.basename(localPath)
+    folderId = createDriveFolder(name, parentId)
+
+    # recursive walk through directory
+    # subdir is full path to current subdir
+    # dirs / files are list of subdir's contents
+    for subdir, dirs, files in os.walk(localPath):
+        subName = os.path.basename(subdir)
+        subId = findFileByName(subName)
+        for dir in dirs:
+            createDriveFolder(dir, subId)
+        for file in files:
+            uploadFile(subdir + "/" + file, file, subId)
+    return
 
 
 # TODO: implement
@@ -105,8 +126,10 @@ def sync():
 
 
 if __name__ == '__main__':
-    uploadFile("arcticStars.jpg", "myBackground.jpg")
+    """uploadFile("arcticStars.jpg", "myBackground.jpg")
     downloadFile("myBackground.jpg", "myBackground.jpg")
     createDriveFolder("test", None)
     createDriveFolder("inner", "test")
-    createDriveFolder("innerer", "inner")
+    createDriveFolder("innerer", "inner")"""
+    connect()
+    uploadFolder("/home/alec/countdown", "root")
