@@ -27,7 +27,6 @@ def connect():
 
 # TODO: make this work with folders
 # (currently only works with files in drive's root directory)
-# TODO: test
 def uploadFile(localPath, remoteName, parentId):
     """ Upload a single file to google drive.
 
@@ -36,14 +35,33 @@ def uploadFile(localPath, remoteName, parentId):
         remoteName {string} -- path to the new file on drive
         parentName {string} -- name of parent folder on drive
     """
+    fileId = findFileByName(remoteName)
     mime = Magic(mime=True).from_file(localPath)
+    media = MediaFileUpload(localPath, mimetype=mime)
+    # specify id if the file already exists
+    if fileId is None:
+        createFile(localPath, remoteName, parentId, mime, media)
+    else:
+        updateFile(localPath, media, fileId)
+
+
+def createFile(localPath, remoteName, parentId, mime, media):
     file_metadata = {'name': remoteName,
                      'parents': [parentId],
                      'mimeType': mime}
-    media = MediaFileUpload(localPath, mimetype=mime)
     file = service.files().create(body=file_metadata,
-                                  media_body=media, fields='id').execute()
-    print("Local file: %s, ID: %s" % (localPath, file.get('id')))
+                                  media_body=media,
+                                  fields='id').execute()
+    print("Created file in drive. Local file: %s, ID: %s" %
+          (localPath, file.get('id')))
+
+
+def updateFile(localPath, media, fileId):
+    file = service.files().update(media_body=media,
+                                  fileId=fileId,
+                                  fields='id').execute()
+    print("Updated file in drive. Local file: %s, ID: %s" %
+          (localPath, file.get('id')))
 
 
 # TODO: make this work with folders
@@ -94,14 +112,15 @@ def createDriveFolder(name, parentId):
     }
     file = service.files().create(body=file_metadata,
                                   fields='id').execute()
-    print('Folder name: %s, ID: %s' % (name, file.get('id')))
+    print('Created drive folder. Name: %s, ID: %s' % (name, file.get('id')))
     return file.get('id')
 
 
 def uploadFolder(localPath, parentId):
     name = os.path.basename(localPath)
-    folderId = createDriveFolder(name, parentId)
-
+    folderId = findFileByName(name)
+    if folderId is None:
+        folderId = createDriveFolder(name, parentId)
     # recursive walk through directory
     # subdir is full path to current subdir
     # dirs / files are list of subdir's contents
@@ -132,4 +151,4 @@ if __name__ == '__main__':
     createDriveFolder("inner", "test")
     createDriveFolder("innerer", "inner")"""
     connect()
-    uploadFolder("/home/alec/countdown", "root")
+    uploadFolder("/home/alec/Pictures/test", "root")
