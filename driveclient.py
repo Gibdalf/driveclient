@@ -11,7 +11,7 @@ import os
 SCOPES = 'https://www.googleapis.com/auth/drive'
 service = None
 
-# TODO: these should be overwriteable using command flags
+# TODO: these should be overridable using command flags
 config = "~/.driveclient/config.json"
 presync = "~/.driveclient/presync.sh"
 postsync = "~/.driveclient/postsync.sh"
@@ -146,9 +146,17 @@ def findRemoteFileId(fileName, parentId):
             break
 
 
-# TODO: implement
-def downloadFolder(id):
-    return
+def downloadFolder(remoteId, localPath):
+    folderName = findRemoteFileName(remoteId)
+
+    # TODO: make sure this works properly for folders
+    downloadFile(remoteId, localPath)
+
+    for file in getDriveFolderChildren(remoteId):
+        if file.get('mimeType') == 'application/vnd.google-apps.folder':
+            downloadFolder(file.get('id'), localPath + "/" + file.get('name'))
+        else:
+            downloadFile(file.get('id'), localPath + "/" + file.get('name'))
 
 
 def downloadFile(remoteId, localPath):
@@ -169,6 +177,27 @@ def downloadFile(remoteId, localPath):
         f.write(fh.getvalue())
 
 
+def findRemoteFileName(fileId):
+    file = service.files().get(fileId=fileId).execute()
+    return file.get('name')
+
+
+def getDriveFolderChildren(folderId):
+    children = []
+    page_token = None
+    query = "'" + folderId + "' in parents"
+    while True:
+        response = service.files().list(q=query,
+                                        spaces='drive',
+                                        fields='nextPageToken, files(id, name)',
+                                        pageToken=page_token).execute()
+        children += response.get('files', [])
+        page_token = response.get('nextPageToken', None)
+        if page_token is None:
+            break
+    return children
+
+
 # TODO: implement
 def cmpFile(localPath, remoteId):
     return
@@ -184,11 +213,16 @@ if __name__ == '__main__':
 
     # TESTING:
 
-    # uploadFile("arcticStars.jpg", "myBackground.jpg")
+    connect()
+    # uploadFile("arcticStars.jpg", "myBackground.jpg", "root")
+    # id = findRemoteFileId("myBackground.jpg", "root")
+    # print(findRemoteFileName(id))
+
     # downloadFile(findRemoteFileId("myBackground.jpg", None), "~/myBackground.jpg")
+
     # createDriveFolder("test", None)
     # createDriveFolder("inner", "test")
     # createDriveFolder("innerer", "inner")
-    # connect()
+
     # uploadFolder("/home/alec/Pictures/test", "root")
-    uploadFolder("/home/alec/countdown", "root")
+    # uploadFolder("/home/alec/countdown", "root")
