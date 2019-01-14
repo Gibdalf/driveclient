@@ -146,17 +146,26 @@ def findRemoteFileId(fileName, parentId):
             break
 
 
-def downloadFolder(remoteId, localPath):
-    folderName = findRemoteFileName(remoteId)
+def downloadRemoteResource(resource, localPath):
+    """ Downloads a remote resource to the given local path.
+    - if the resource is a folder, recursively creates directories and downloads contents
+    - if the resource is a file, calls downloadFile
 
-    # TODO: make sure this works properly for folders
-    downloadFile(remoteId, localPath)
+    Arguments:
+        resource {File} -- The resource to be downloaded. A map with mimeType and id fields.
+        localPath {String} -- The path the resource will be downloaded to
+    """
+    resourceMime = resource.get('mimeType')
+    resourceId = resource.get('id')
 
-    for file in getDriveFolderChildren(remoteId):
-        if file.get('mimeType') == 'application/vnd.google-apps.folder':
-            downloadFolder(file.get('id'), localPath + "/" + file.get('name'))
-        else:
-            downloadFile(file.get('id'), localPath + "/" + file.get('name'))
+    if resourceMime == 'application/vnd.google-apps.folder':
+        os.mkdir(localPath)
+        for file in getDriveFolderChildren(resourceId):
+            downloadRemoteResource(file, localPath +
+                                   "/" + file.get('name'))
+    else:
+        downloadFile(resourceId, localPath)
+    # TODO: make work for google docs
 
 
 def downloadFile(remoteId, localPath):
@@ -177,19 +186,27 @@ def downloadFile(remoteId, localPath):
         f.write(fh.getvalue())
 
 
-def findRemoteFileName(fileId):
+def findRemoteFile(fileId):
     file = service.files().get(fileId=fileId).execute()
-    return file.get('name')
+    return file
 
 
 def getDriveFolderChildren(folderId):
+    """ Get a list of child files for a given folderId
+
+    Arguments:
+        folderId {Integer} -- The id of the folder, for which you want to find its children
+
+    Returns:
+        [File] -- a list of child files of the given folder, a file is a map containing name and id fields
+    """
     children = []
     page_token = None
     query = "'" + folderId + "' in parents"
     while True:
         response = service.files().list(q=query,
                                         spaces='drive',
-                                        fields='nextPageToken, files(id, name)',
+                                        fields='nextPageToken, files(id, name, mimeType)',
                                         pageToken=page_token).execute()
         children += response.get('files', [])
         page_token = response.get('nextPageToken', None)
@@ -212,17 +229,29 @@ if __name__ == '__main__':
     """
 
     # TESTING:
-
     connect()
+
+    # TEST 1: upload a file, verify its name is the same as the name chosen when uploading it
     # uploadFile("arcticStars.jpg", "myBackground.jpg", "root")
     # id = findRemoteFileId("myBackground.jpg", "root")
-    # print(findRemoteFileName(id))
+    # print(findRemoteFile(id).get('name'))
 
+    # TEST 2: download a file
     # downloadFile(findRemoteFileId("myBackground.jpg", None), "~/myBackground.jpg")
 
+    # TEST 3: make some nested folders
     # createDriveFolder("test", None)
     # createDriveFolder("inner", "test")
     # createDriveFolder("innerer", "inner")
 
+    # TEST 4: upload a test folder, and print out its contents names ids and mimetypes
     # uploadFolder("/home/alec/Pictures/test", "root")
+    # print(getDriveFolderChildren(findRemoteFileId(
+    #     "test", "root")))
+
+    # TEST 5: upload a folder containing many small files
     # uploadFolder("/home/alec/countdown", "root")
+
+    # TEST 6: download a folder
+    # downloadRemoteResource(findRemoteFile(findRemoteFileId(
+    #    "test", "root")), "/home/alec/driveclient/test")
