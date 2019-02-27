@@ -1,11 +1,13 @@
 from __future__ import print_function
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
+from googleapiclient.errors import HttpError
 from httplib2 import Http
 from oauth2client import file, client, tools
 from magic import Magic
 import io
 import os
+import sys
 
 # If modifying these scopes, delete the file token.json.
 SCOPES = 'https://www.googleapis.com/auth/drive'
@@ -13,8 +15,8 @@ service = None
 
 # TODO: these should be overridable using command flags
 config = "~/.driveclient/config.json"
-presync = "~/.driveclient/presync.sh"
-postsync = "~/.driveclient/postsync.sh"
+presync = "~/.driveclient/presync.py"
+postsync = "~/.driveclient/postsync.py"
 
 
 def connect():
@@ -155,17 +157,23 @@ def downloadRemoteResource(resource, localPath):
         resource {File} -- The resource to be downloaded. A map with mimeType and id fields.
         localPath {String} -- The path the resource will be downloaded to
     """
+    print("Downloading remote resource " +
+          resource.get('name') + " to local path " + localPath)
     resourceMime = resource.get('mimeType')
     resourceId = resource.get('id')
 
     if resourceMime == 'application/vnd.google-apps.folder':
-        os.mkdir(localPath)
+        # prevent failure on already existing folders
+        if not os.path.exists(localPath):
+            os.mkdir(localPath)
+        else:
+            print(localPath + " already exists")
         for file in getDriveFolderChildren(resourceId):
             downloadRemoteResource(file, localPath +
                                    "/" + file.get('name'))
     else:
         downloadFile(resourceId, localPath)
-    # TODO: make work for google docs
+    # TODO: make this work for google docs
 
 
 def downloadFile(remoteId, localPath):
@@ -179,9 +187,14 @@ def downloadFile(remoteId, localPath):
     fh = io.BytesIO()
     downloader = MediaIoBaseDownload(fh, request)
     done = False
-    while done is False:
-        status, done = downloader.next_chunk()
-        print("Download %d%%." % int(status.progress() * 100))
+    while not done:
+        try:
+            status, done = downloader.next_chunk()
+            print("Download %d%%." % int(status.progress() * 100))
+        except HttpError as err:
+            sys.stderr.write("Download failed. Error code: " +
+                             str(err.resp.status) + "\n")
+            return
     with open(localPath, 'wb') as f:
         f.write(fh.getvalue())
 
@@ -223,9 +236,9 @@ def cmpFile(localPath, remoteId):
 if __name__ == '__main__':
     """
     Steps:
-        1. run the presync bash script (can be used to zip folders with many files for example)
+        1. run the presync script (can be used to zip folders with many files before uploading for example)
         2. run the sync function
-        3. run the postsync bash script (can be used to unzip downloaded zipped folders for example)
+        3. run the postsync script (can be used to unzip downloaded zipped folders for example)
     """
 
     # TESTING:
@@ -250,8 +263,13 @@ if __name__ == '__main__':
     #     "test", "root")))
 
     # TEST 5: upload a folder containing many small files
+    # TODO: currently takes a ridiculously long time to complete. Add compression for this case.
     # uploadFolder("/home/alec/countdown", "root")
 
     # TEST 6: download a folder
     # downloadRemoteResource(findRemoteFile(findRemoteFileId(
     #    "test", "root")), "/home/alec/driveclient/test")
+
+    # TEST 7: download a folder containing nested folders and many small files
+    downloadRemoteResource(findRemoteFile(findRemoteFileId(
+        "countdown", "root")), "/home/alec/driveclient/test")
